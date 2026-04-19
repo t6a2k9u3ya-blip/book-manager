@@ -35,6 +35,12 @@
   .search-bar input:focus { border-color: #aaa; }
   .search-bar select { padding: 10px 14px; border: 1px solid #e0e0e0; border-radius: 10px; font-size: 14px; background: white; outline: none; cursor: pointer; }
 
+  .title-row { display: flex; gap: 8px; }
+  .title-row input { flex: 1; }
+  .camera-btn { width: 50px; height: 50px; border: 1px solid #e0e0e0; border-radius: 10px; background: white; font-size: 20px; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: background 0.2s; }
+  .camera-btn:active { background: #f0ede8; }
+  .camera-btn:disabled { opacity: 0.4; cursor: default; }
+
   .book-list { display: flex; flex-direction: column; gap: 12px; }
   .book-card { background: white; border-radius: 12px; padding: 16px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); display: flex; align-items: flex-start; gap: 14px; }
   .book-icon { width: 44px; height: 60px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; background: #f0ede8; }
@@ -148,7 +154,11 @@
     <div class="modal-body">
       <div class="field">
         <label>タイトル * <span id="autoFillStatus" style="font-weight:normal;font-size:11px;color:#888;margin-left:4px;"></span></label>
-        <input type="text" id="fTitle" placeholder="本のタイトル" onblur="triggerAutoFill()" onkeydown="if(event.key==='Enter'){this.blur()}">
+        <div class="title-row">
+          <input type="text" id="fTitle" placeholder="本のタイトル" onblur="triggerAutoFill()" onkeydown="if(event.key==='Enter'){this.blur()}">
+          <button type="button" class="camera-btn" id="cameraBtn" onclick="triggerCamera()" title="写真から読み取る">📷</button>
+        </div>
+        <input type="file" id="cameraInput" accept="image/*" style="display:none" onchange="processImage(event)">
       </div>
       <div class="field">
         <label>著者</label>
@@ -439,6 +449,60 @@
   function tryFill(id, value) {
     const el = document.getElementById(id);
     if (!el.value && value) el.value = value;
+  }
+
+  // Camera OCR
+  let tesseractReady = false;
+
+  function loadScript(src) {
+    return new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = src; s.onload = res; s.onerror = rej;
+      document.head.appendChild(s);
+    });
+  }
+
+  async function triggerCamera() {
+    const btn = document.getElementById('cameraBtn');
+    if (!tesseractReady) {
+      btn.disabled = true;
+      btn.textContent = '⏳';
+      setStatus('OCR読み込み中...');
+      try {
+        await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js');
+        tesseractReady = true;
+      } catch {
+        setStatus('読み込み失敗');
+        btn.disabled = false; btn.textContent = '📷'; return;
+      }
+      btn.disabled = false; btn.textContent = '📷';
+      setStatus('');
+    }
+    document.getElementById('cameraInput').click();
+  }
+
+  async function processImage(event) {
+    const file = event.target.files[0];
+    event.target.value = '';
+    if (!file) return;
+    const btn = document.getElementById('cameraBtn');
+    btn.disabled = true; btn.textContent = '⏳';
+    setStatus('文字を認識中...');
+    try {
+      const { data: { text } } = await Tesseract.recognize(file, 'jpn+eng');
+      const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 1);
+      const title = lines.find(l => l.length >= 2 && l.length <= 60) || lines[0] || '';
+      if (title) {
+        document.getElementById('fTitle').value = title;
+        triggerAutoFill();
+      } else {
+        setStatus('文字を認識できませんでした');
+      }
+    } catch {
+      setStatus('認識に失敗しました');
+    } finally {
+      btn.disabled = false; btn.textContent = '📷';
+    }
   }
 
   function triggerAutoFill() {
