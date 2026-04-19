@@ -608,18 +608,38 @@
     });
   }
 
+  function extractISBNFromText(text) {
+    const cleaned = text.replace(/[\s\-]/g, '');
+    const m = cleaned.match(/97[89]\d{10}/);
+    if (m) return m[0];
+    return null;
+  }
+
   async function detectISBN(file) {
-    if (!('BarcodeDetector' in window)) return null;
+    // Method 1: Native BarcodeDetector（対応ブラウザのみ）
+    if ('BarcodeDetector' in window) {
+      try {
+        const img = await loadImageElement(file);
+        const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a'] });
+        const codes = await detector.detect(img);
+        for (const c of codes) {
+          const v = c.rawValue.replace(/\D/g, '');
+          if (v.length === 13 && (v.startsWith('978') || v.startsWith('979'))) return v;
+        }
+      } catch {}
+    }
+    // Method 2: OCRでISBN文字列を抽出（回転・角度に強い）
     try {
-      const img = await loadImageElement(file);
-      const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a'] });
-      const codes = await detector.detect(img);
-      for (const c of codes) {
-        const v = c.rawValue.replace(/\D/g, '');
-        if (v.length === 13 && (v.startsWith('978') || v.startsWith('979'))) return v;
+      if (!tesseractReady) {
+        setStatus('OCR読み込み中...');
+        await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js');
+        tesseractReady = true;
       }
-      return null;
-    } catch { return null; }
+      const { data: { text } } = await Tesseract.recognize(file, 'eng');
+      const isbn = extractISBNFromText(text);
+      if (isbn) return isbn;
+    } catch {}
+    return null;
   }
 
   async function autoFillByISBN(isbn) {
