@@ -304,8 +304,8 @@
 
   async function signInWithGoogle() {
     const provider = new firebase.auth.GoogleAuthProvider();
-    try { await auth.signInWithPopup(provider); }
-    catch (e) { console.error(e); alert('ログインに失敗しました'); }
+    try { await auth.signInWithRedirect(provider); }
+    catch (e) { console.error(e); alert('ログインに失敗しました: ' + e.message); }
   }
 
   async function signOutUser() {
@@ -676,6 +676,13 @@
 
     setStatus(filled ? '✓ 自動入力しました' : '見つかりませんでした');
   }
+
+  // Handle redirect result
+  auth.getRedirectResult().catch(e => {
+    if (e.code && e.code !== 'auth/no-auth-event') {
+      alert('ログインエラー: ' + e.message);
+    }
+  });
 
   // Auth state
   auth.onAuthStateChanged(user => {
