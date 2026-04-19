@@ -534,9 +534,9 @@
   const GENRE_MAP = [
     [/漫画|マンガ|comic|manga|graphic novel/i, '漫画'],
     [/小説|fiction|novel|literary|juvenile|romance|narrative|thriller|mystery|horror/i, '小説'],
-    [/経済|経営|ビジネス|business|economics|management|finance|marketing|entrepreneur|invest/i, 'ビジネス'],
+    [/経済|経営|ビジネス|実業|起業|マーケティング|投資|財務|会計|お金|資産|business|economics|management|finance|marketing|entrepreneur|invest/i, 'ビジネス'],
     [/情報|コンピュータ|プログラム|computer|technolog|programming|software|engineering|internet|web/i, '技術'],
-    [/自己啓発|心理|self.help|personal development|success|motivat|psychology|mental health/i, '自己啓発'],
+    [/自己啓発|処世|人生|成功|習慣|メンタル|心理|self.help|personal development|success|motivat|psychology|mental health/i, '自己啓発'],
     [/歴史|history|historical|ancient|modern history/i, '歴史'],
     [/自然科学|物理|化学|生物|science|physics|biology|chemistry|math|astronomy|nature/i, '科学'],
     [/哲学|倫理|思想|philosophy|ethics|logic|stoic/i, '哲学'],
@@ -642,6 +642,12 @@
     return null;
   }
 
+  function tryFillGenre(texts) {
+    if (document.getElementById('fGenre').value) return;
+    const g = pickGenre(texts);
+    if (g) document.getElementById('fGenre').value = g;
+  }
+
   async function autoFillByISBN(isbn) {
     // NDL API
     try {
@@ -655,9 +661,10 @@
         if (t) document.getElementById('fTitle').value = t;
         tryFill('fAuthor', item.getElementsByTagNameNS(NS, 'creator')[0]?.textContent);
         const subjects = [...item.getElementsByTagNameNS(NS, 'subject')].map(s => s.textContent);
-        const genre = pickGenre(subjects);
-        if (genre) tryFill('fGenre', genre);
-        tryFill('fSummary', item.getElementsByTagNameNS(NS, 'description')[0]?.textContent);
+        const desc = item.getElementsByTagNameNS(NS, 'description')[0]?.textContent || '';
+        tryFill('fSummary', desc);
+        // ジャンル: subjects → タイトル → 概要の順に推定
+        tryFillGenre([...subjects, t || '', desc]);
         setStatus('✓ バーコードで自動入力しました');
         return true;
       }
@@ -670,8 +677,10 @@
         const info = data.items[0].volumeInfo;
         if (info.title) document.getElementById('fTitle').value = info.title;
         tryFill('fAuthor', info.authors?.[0]);
-        if (info.categories?.length) { const g = pickGenre(info.categories); if (g) tryFill('fGenre', g); }
-        if (info.description) tryFill('fSummary', await translateToJa(info.description));
+        const desc = info.description || '';
+        if (desc) tryFill('fSummary', await translateToJa(desc));
+        // ジャンル: categories → タイトル → 概要の順に推定
+        tryFillGenre([...(info.categories || []), info.title || '', desc]);
         setStatus('✓ バーコードで自動入力しました');
         return true;
       }
