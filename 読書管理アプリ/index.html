@@ -184,6 +184,11 @@
     <select id="genreFilter" onchange="renderBooks()">
       <option value="">ジャンル: すべて</option>
     </select>
+    <select id="sortSelect" onchange="renderBooks()">
+      <option value="date-desc">新しい順</option>
+      <option value="rating-desc">評価が高い順</option>
+      <option value="rating-asc">評価が低い順</option>
+    </select>
   </div>
 
   <div class="book-list" id="bookList"></div>
@@ -377,7 +382,12 @@
       if (genre && b.genre !== genre) return false;
       if (query && !b.title.toLowerCase().includes(query) && !b.author.toLowerCase().includes(query)) return false;
       return true;
-    }).sort((a, b) => b.addedAt - a.addedAt);
+    }).sort((a, b) => {
+      const s = document.getElementById('sortSelect').value;
+      if (s === 'rating-desc') return (b.rating || 0) - (a.rating || 0) || b.addedAt - a.addedAt;
+      if (s === 'rating-asc') return (a.rating || 0) - (b.rating || 0) || b.addedAt - a.addedAt;
+      return b.addedAt - a.addedAt;
+    });
 
     const list = document.getElementById('bookList');
     if (filtered.length === 0) {
@@ -399,11 +409,15 @@
               <span class="t">${esc(b.title)}</span>
               ${hasMeta ? `<span class="chev" id="chev-${b.id}">▸</span>` : ''}
             </div>
-            <div class="book-author">${b.author ? esc(b.author) : '著者不明'}${b.status === 'want' ? `
-              ${b.purchased ? `<span class="badge purchased" style="margin-left:8px">📦 書籍購入済み</span>` : ''}
-              ${b.audibleDownloaded ? `<span class="badge medium-audible" style="margin-left:8px">🎧 Audible済</span>` : ''}
-              ${!b.purchased && !b.audibleDownloaded ? `<span class="badge unpurchased" style="margin-left:8px">🛒 未購入</span>` : ''}
-            ` : ''}</div>
+            <div class="book-author">
+              ${b.author ? esc(b.author) : '著者不明'}
+              ${b.status === 'want' ? `
+                ${b.purchased ? `<span class="badge purchased">📦 書籍購入済み</span>` : ''}
+                ${b.audibleDownloaded ? `<span class="badge medium-audible">🎧 Audible済</span>` : ''}
+                ${!b.purchased && !b.audibleDownloaded ? `<span class="badge unpurchased">🛒 未購入</span>` : ''}
+              ` : ''}
+              ${b.rating ? `<span class="stars" style="margin-left:auto;font-size:12px">${'★'.repeat(b.rating)}${'☆'.repeat(5-b.rating)}</span>` : ''}
+            </div>
             <div class="book-detail" id="detail-${b.id}">
               <div class="book-meta">
                 ${b.genre ? `<span class="badge genre">${esc(b.genre)}</span>` : ''}
