@@ -248,7 +248,10 @@
       <div class="field" id="purchaseField" style="display:none">
         <label>購入状況</label>
         <label class="purchase-check">
-          <input type="checkbox" id="fPurchased"> 購入済み
+          <input type="checkbox" id="fPurchased"> 書籍購入済み
+        </label>
+        <label class="purchase-check">
+          <input type="checkbox" id="fAudibleDownloaded"> Audibleダウンロード済
         </label>
       </div>
       <div class="field" id="mediumField" style="display:none">
@@ -396,7 +399,11 @@
               <span class="t">${esc(b.title)}</span>
               ${hasMeta ? `<span class="chev" id="chev-${b.id}">▸</span>` : ''}
             </div>
-            <div class="book-author">${b.author ? esc(b.author) : '著者不明'}${b.status === 'want' ? `<span class="badge ${b.purchased ? 'purchased' : 'unpurchased'}" style="margin-left:8px">${b.purchased ? '📦 購入済み' : '🛒 未購入'}</span>` : ''}</div>
+            <div class="book-author">${b.author ? esc(b.author) : '著者不明'}${b.status === 'want' ? `
+              ${b.purchased ? `<span class="badge purchased" style="margin-left:8px">📦 書籍購入済み</span>` : ''}
+              ${b.audibleDownloaded ? `<span class="badge medium-audible" style="margin-left:8px">🎧 Audible済</span>` : ''}
+              ${!b.purchased && !b.audibleDownloaded ? `<span class="badge unpurchased" style="margin-left:8px">🛒 未購入</span>` : ''}
+            ` : ''}</div>
             <div class="book-detail" id="detail-${b.id}">
               <div class="book-meta">
                 ${b.genre ? `<span class="badge genre">${esc(b.genre)}</span>` : ''}
@@ -431,6 +438,7 @@
     document.getElementById('fGenre').value = book ? (book.genre || '') : '';
     document.getElementById('fStatus').value = book ? book.status : currentTab;
     document.getElementById('fPurchased').checked = book ? !!book.purchased : false;
+    document.getElementById('fAudibleDownloaded').checked = book ? !!book.audibleDownloaded : false;
     document.getElementById('fMedium').value = book ? (book.medium || '') : '';
     document.getElementById('fSummary').value = book ? (book.summary || '') : '';
     updateRatingUI();
@@ -479,6 +487,7 @@
       status,
       rating: status === 'read' ? currentRating : 0,
       purchased: status === 'want' ? document.getElementById('fPurchased').checked : false,
+      audibleDownloaded: status === 'want' ? document.getElementById('fAudibleDownloaded').checked : false,
       medium: status === 'read' ? document.getElementById('fMedium').value : '',
       summary: document.getElementById('fSummary').value.trim(),
       addedAt: editingId ? (books.find(b => b.id === editingId)?.addedAt || Date.now()) : Date.now(),
