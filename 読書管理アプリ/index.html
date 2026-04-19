@@ -233,8 +233,10 @@
           <option value="">選択してください</option>
           <option>小説</option>
           <option>ビジネス</option>
+          <option>金融</option>
           <option>技術</option>
           <option>自己啓発</option>
+          <option>教養</option>
           <option>歴史</option>
           <option>科学</option>
           <option>哲学</option>
@@ -534,13 +536,15 @@
   const GENRE_MAP = [
     [/漫画|マンガ|comic|manga|graphic novel/i, '漫画'],
     [/小説|fiction|novel|literary|juvenile|romance|narrative|thriller|mystery|horror/i, '小説'],
-    [/経済|経営|ビジネス|実業|起業|マーケティング|投資|財務|会計|お金|資産|business|economics|management|finance|marketing|entrepreneur|invest/i, 'ビジネス'],
+    [/経済|経営|ビジネス|実業|起業|マーケティング|business|economics|management|marketing|entrepreneur/i, 'ビジネス'],
+    [/金融|投資|株|財務|会計|お金|資産|節約|税|保険|finance|invest|asset|tax|accounting/i, '金融'],
     [/情報|コンピュータ|プログラム|computer|technolog|programming|software|engineering|internet|web/i, '技術'],
     [/自己啓発|処世|人生|成功|習慣|メンタル|心理|self.help|personal development|success|motivat|psychology|mental health/i, '自己啓発'],
     [/歴史|history|historical|ancient|modern history/i, '歴史'],
     [/自然科学|物理|化学|生物|science|physics|biology|chemistry|math|astronomy|nature/i, '科学'],
     [/哲学|倫理|思想|philosophy|ethics|logic|stoic/i, '哲学'],
     [/エッセイ|随筆|評論|essay|memoir|biography|autobiography/i, 'エッセイ'],
+    [/教養|雑学|知識|リベラルアーツ|general knowledge|liberal arts|culture|literacy/i, '教養'],
   ];
 
   function mapGenre(text) {
