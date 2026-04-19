@@ -583,7 +583,7 @@
     if (!el.value && value) el.value = value;
   }
 
-  // Camera OCR
+  // Camera / Barcode / OCR
   let tesseractReady = false;
 
   function loadScript(src) {
@@ -594,23 +594,69 @@
     });
   }
 
-  async function triggerCamera() {
-    const btn = document.getElementById('cameraBtn');
-    if (!tesseractReady) {
-      btn.disabled = true;
-      btn.textContent = '⏳';
-      setStatus('OCR読み込み中...');
-      try {
-        await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js');
-        tesseractReady = true;
-      } catch {
-        setStatus('読み込み失敗');
-        btn.disabled = false; btn.textContent = '📷'; return;
-      }
-      btn.disabled = false; btn.textContent = '📷';
-      setStatus('');
-    }
+  function triggerCamera() {
     document.getElementById('cameraInput').click();
+  }
+
+  async function loadImageElement(file) {
+    return new Promise((res, rej) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => { URL.revokeObjectURL(url); res(img); };
+      img.onerror = () => { URL.revokeObjectURL(url); rej(); };
+      img.src = url;
+    });
+  }
+
+  async function detectISBN(file) {
+    if (!('BarcodeDetector' in window)) return null;
+    try {
+      const img = await loadImageElement(file);
+      const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a'] });
+      const codes = await detector.detect(img);
+      for (const c of codes) {
+        const v = c.rawValue.replace(/\D/g, '');
+        if (v.length === 13 && (v.startsWith('978') || v.startsWith('979'))) return v;
+      }
+      return null;
+    } catch { return null; }
+  }
+
+  async function autoFillByISBN(isbn) {
+    // NDL API
+    try {
+      const res = await fetch(`https://iss.ndl.go.jp/api/opensearch?isbn=${isbn}&cnt=1`);
+      const xml = await res.text();
+      const xDoc = new DOMParser().parseFromString(xml, 'text/xml');
+      const item = xDoc.querySelector('item');
+      if (item) {
+        const NS = 'http://purl.org/dc/elements/1.1/';
+        const t = item.querySelector('title')?.textContent;
+        if (t) document.getElementById('fTitle').value = t;
+        tryFill('fAuthor', item.getElementsByTagNameNS(NS, 'creator')[0]?.textContent);
+        const subjects = [...item.getElementsByTagNameNS(NS, 'subject')].map(s => s.textContent);
+        const genre = pickGenre(subjects);
+        if (genre) tryFill('fGenre', genre);
+        tryFill('fSummary', item.getElementsByTagNameNS(NS, 'description')[0]?.textContent);
+        setStatus('✓ バーコードで自動入力しました');
+        return true;
+      }
+    } catch {}
+    // Google Books API
+    try {
+      const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}&maxResults=1`);
+      const data = await res.json();
+      if (data.items?.length) {
+        const info = data.items[0].volumeInfo;
+        if (info.title) document.getElementById('fTitle').value = info.title;
+        tryFill('fAuthor', info.authors?.[0]);
+        if (info.categories?.length) { const g = pickGenre(info.categories); if (g) tryFill('fGenre', g); }
+        if (info.description) tryFill('fSummary', await translateToJa(info.description));
+        setStatus('✓ バーコードで自動入力しました');
+        return true;
+      }
+    } catch {}
+    return false;
   }
 
   async function processImage(event) {
@@ -619,11 +665,34 @@
     if (!file) return;
     const btn = document.getElementById('cameraBtn');
     btn.disabled = true; btn.textContent = '⏳';
+
+    // 1st: バーコード（ISBN）検出
+    setStatus('バーコード読み取り中...');
+    const isbn = await detectISBN(file);
+    if (isbn) {
+      setStatus('ISBN検索中...');
+      const ok = await autoFillByISBN(isbn);
+      if (ok) { btn.disabled = false; btn.textContent = '📷'; return; }
+    }
+
+    // 2nd: OCRフォールバック
+    if (!tesseractReady) {
+      setStatus('OCR読み込み中...');
+      try {
+        await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js');
+        tesseractReady = true;
+      } catch {
+        setStatus('読み込み失敗');
+        btn.disabled = false; btn.textContent = '📷'; return;
+      }
+    }
     setStatus('文字を認識中...');
     try {
       const { data: { text } } = await Tesseract.recognize(file, 'jpn+eng');
-      const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 1);
-      const title = lines.find(l => l.length >= 2 && l.length <= 60) || lines[0] || '';
+      const lines = text.split('\n')
+        .map(l => l.trim())
+        .filter(l => l.length >= 2 && /[^\s！-／：-＠「-｀、-〒\W]/.test(l));
+      const title = lines.sort((a, b) => b.length - a.length).find(l => l.length <= 40) || lines[0] || '';
       if (title) {
         document.getElementById('fTitle').value = title;
         triggerAutoFill();
