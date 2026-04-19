@@ -304,8 +304,16 @@
 
   async function signInWithGoogle() {
     const provider = new firebase.auth.GoogleAuthProvider();
-    try { await auth.signInWithRedirect(provider); }
-    catch (e) { console.error(e); alert('ログインに失敗しました: ' + e.message); }
+    try {
+      await auth.signInWithPopup(provider);
+    } catch (e) {
+      if (e.code === 'auth/popup-blocked' || e.code === 'auth/popup-closed-by-user') {
+        try { await auth.signInWithRedirect(provider); } catch (e2) { console.error(e2); }
+      } else {
+        console.error(e);
+        alert('ログインに失敗しました: ' + e.message);
+      }
+    }
   }
 
   async function signOutUser() {
