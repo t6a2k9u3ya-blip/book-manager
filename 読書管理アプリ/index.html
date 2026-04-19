@@ -8,6 +8,9 @@
 <meta name="apple-mobile-web-app-title" content="読書管理">
 <meta name="theme-color" content="#2c2c2c">
 <title>読書管理アプリ</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <style>
   :root {
     --bg: #0f0f14;
@@ -125,6 +128,21 @@
     .action-btn { min-height: 40px; }
     .add-btn { min-height: 50px; font-size: 16px; }
   }
+
+  /* Auth UI */
+  .user-info { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .user-name { font-size: 12px; color: var(--text-2); max-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .logout-btn { padding: 6px 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; font-size: 11px; color: var(--text-2); cursor: pointer; transition: border-color 0.2s; }
+  .logout-btn:active { border-color: var(--border-up); }
+  .login-overlay { display: none; position: fixed; inset: 0; background: var(--bg); z-index: 200; align-items: center; justify-content: center; }
+  .login-overlay.show { display: flex; }
+  .login-card { background: var(--surface); border: 1px solid var(--border-up); border-radius: 22px; padding: 48px 36px; text-align: center; max-width: 340px; width: 90%; }
+  .login-card .login-icon { font-size: 52px; margin-bottom: 18px; }
+  .login-card h2 { font-size: 20px; font-weight: 700; margin-bottom: 10px; letter-spacing: 0.2px; }
+  .login-card p { font-size: 14px; color: var(--text-2); margin-bottom: 32px; line-height: 1.7; }
+  .google-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 14px; background: #fff; border: none; border-radius: 12px; font-size: 15px; font-weight: 600; color: #222; cursor: pointer; transition: opacity 0.2s; }
+  .google-btn:active { opacity: 0.82; }
+  .google-icon { width: 20px; height: 20px; flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -132,6 +150,10 @@
 <header>
   <span>📚</span>
   <h1>読書管理</h1>
+  <div class="user-info">
+    <span class="user-name" id="userName"></span>
+    <button class="logout-btn" id="logoutBtn" onclick="signOutUser()" style="display:none">ログアウト</button>
+  </div>
 </header>
 
 <div class="container">
@@ -165,6 +187,19 @@
   </div>
 
   <div class="book-list" id="bookList"></div>
+</div>
+
+<!-- Login Overlay -->
+<div class="login-overlay show" id="loginOverlay">
+  <div class="login-card">
+    <div class="login-icon">📚</div>
+    <h2>読書管理アプリ</h2>
+    <p>Googleアカウントでサインインして<br>どのデバイスからでも本を管理できます</p>
+    <button class="google-btn" onclick="signInWithGoogle()">
+      <svg class="google-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+      Googleでサインイン
+    </button>
+  </div>
 </div>
 
 <!-- Add/Edit Modal -->
@@ -247,15 +282,58 @@
 </div>
 
 <script>
-  let books = JSON.parse(localStorage.getItem('books') || '[]');
+  const firebaseConfig = {
+    apiKey: "AIzaSyAOTeh93WPFyGulGiiq-ECHlwnysCC5fhM",
+    authDomain: "book-manager-161db.firebaseapp.com",
+    projectId: "book-manager-161db",
+    storageBucket: "book-manager-161db.firebasestorage.app",
+    messagingSenderId: "676478447430",
+    appId: "1:676478447430:web:f89f2e400d010751d63f47"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+
+  let books = [];
   let currentTab = 'read';
   let editingId = null;
   let currentRating = 0;
+  let unsubscribeBooks = null;
 
   const GENRE_ICONS = { '小説':'📖', 'ビジネス':'💼', '技術':'💻', '自己啓発':'🌱', '歴史':'🏛️', '科学':'🔬', '哲学':'🤔', 'エッセイ':'✏️', '漫画':'🎨', 'その他':'📚' };
 
-  function save() {
-    localStorage.setItem('books', JSON.stringify(books));
+  async function signInWithGoogle() {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    try { await auth.signInWithPopup(provider); }
+    catch (e) { console.error(e); alert('ログインに失敗しました'); }
+  }
+
+  async function signOutUser() {
+    if (!confirm('ログアウトしますか？')) return;
+    await auth.signOut();
+  }
+
+  function subscribeToBooks(uid) {
+    if (unsubscribeBooks) unsubscribeBooks();
+    unsubscribeBooks = db.collection('users').doc(uid).collection('books')
+      .onSnapshot(snap => {
+        books = snap.docs.map(d => d.data());
+        renderBooks();
+        updateStats();
+        updateGenreFilter();
+      });
+  }
+
+  async function saveToFirestore(book) {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    await db.collection('users').doc(uid).collection('books').doc(book.id).set(book);
+  }
+
+  async function deleteFromFirestore(id) {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    await db.collection('users').doc(uid).collection('books').doc(id).delete();
   }
 
   function switchTab(tab) {
@@ -381,7 +459,7 @@
     });
   }
 
-  function saveBook() {
+  async function saveBook() {
     const title = document.getElementById('fTitle').value.trim();
     if (!title) { alert('タイトルを入力してください'); return; }
     const status = document.getElementById('fStatus').value;
@@ -397,15 +475,9 @@
       summary: document.getElementById('fSummary').value.trim(),
       addedAt: editingId ? (books.find(b => b.id === editingId)?.addedAt || Date.now()) : Date.now(),
     };
-    if (editingId) {
-      books = books.map(b => b.id === editingId ? book : b);
-    } else {
-      books.push(book);
-    }
-    save();
+    await saveToFirestore(book);
     closeModal();
     if (book.status !== currentTab) switchTab(book.status);
-    else renderBooks();
   }
 
   function editBook(id) {
@@ -413,19 +485,16 @@
     if (book) openModal(book);
   }
 
-  function deleteBook(id) {
+  async function deleteBook(id) {
     if (!confirm('この本を削除しますか？')) return;
-    books = books.filter(b => b.id !== id);
-    save();
-    renderBooks();
+    await deleteFromFirestore(id);
   }
 
-  function moveToRead(id) {
+  async function moveToRead(id) {
     const book = books.find(b => b.id === id);
     if (!book) return;
     book.status = 'read';
-    save();
-    renderBooks();
+    await saveToFirestore(book);
   }
 
   // Auto-fill
@@ -608,10 +677,24 @@
     setStatus(filled ? '✓ 自動入力しました' : '見つかりませんでした');
   }
 
-  // Init
-  renderBooks();
-  updateStats();
-  updateGenreFilter();
+  // Auth state
+  auth.onAuthStateChanged(user => {
+    if (user) {
+      document.getElementById('loginOverlay').classList.remove('show');
+      document.getElementById('userName').textContent = user.displayName || user.email;
+      document.getElementById('logoutBtn').style.display = 'block';
+      subscribeToBooks(user.uid);
+    } else {
+      document.getElementById('loginOverlay').classList.add('show');
+      document.getElementById('logoutBtn').style.display = 'none';
+      document.getElementById('userName').textContent = '';
+      if (unsubscribeBooks) { unsubscribeBooks(); unsubscribeBooks = null; }
+      books = [];
+      renderBooks();
+      updateStats();
+      updateGenreFilter();
+    }
+  });
 </script>
 </body>
 </html>
